@@ -1,6 +1,6 @@
 # Thesis
 
-## Author
+**Author**
 Liam Mills, University of Sydney
 B. Software Eng (Hons), B. Commerce
 
