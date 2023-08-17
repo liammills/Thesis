@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "thesis-code"
+version = "0.1.0"
+description = ""
+authors = ["Liam Mills <liam.mills1511@gmail.com>"]
+readme = "README.md"
+packages = [{include = "thesis_code"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
