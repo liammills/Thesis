@@ -8,6 +8,9 @@ packages = [{include = "thesis_code"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
+pandas = "^2.0.3"
+amplpy = "^0.11.2"
+black = "^23.7.0"
 
 
 [build-system]
