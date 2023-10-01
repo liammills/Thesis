@@ -11,17 +11,19 @@ Supervised by Gregor Verbič, PhD
 **Note**: If on an M1/M2 chip, install Rosetta 2 with `softwareupdate --install-rosetta` to ensure compatibility with AMPL modules.
 
 ### Using Poetry
-1. `poetry install`
-2. `poetry run`
+1. `poetry shell`
+2. `poetry install`
+3. `cd hems`
+4. `python3 hems_pv_battery`
+5. `exit` to exit poetry shell
 
-## Potential Libraries to Use
- - [Open NEM Py](https://github.com/opennem/opennempy)
- - [MMS Monthly CLI](https://github.com/prakaa/mms-monthly-cli)
-
+## External Libraries Used
+ - [AmplPy](https://amplpy.readthedocs.io/)
  - [Pandas](https://pandas.pydata.org/)
 
-**For Optimisation**
+**Potential**
 
  - [Pyomo](pyomo.org)
- - [AmplPy](https://amplpy.readthedocs.io/)
  - [OR Tools (Google)](https://developers.google.com/optimization)
+ - [Open NEM Py](https://github.com/opennem/opennempy)
+ - [MMS Monthly CLI](https://github.com/prakaa/mms-monthly-cli)
