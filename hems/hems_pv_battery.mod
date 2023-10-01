@@ -15,14 +15,14 @@ param PgM = 15;  /* Maximum capacity of grid connection in kW */
 param ebM >= 0;  # Battery maximum storage limit [kWh] | change to set for EV
 param ebm >= 0;  # Battery minimum storage limit [kWh] | change to set for EV
 param eb1 >= 0;  # Start-of-day battery state of charge (SOC)
-param ebN{d in D} = 0.2*ebM; # End-of-day (day 2 in a 2-day rolling horizon) battery state of charge (SOC) -  20% Max SOC
+param ebN = 0.8 * ebM; # End-of-day (day 2 in a 2-day rolling horizon) battery state of charge (SOC) -  20% Max SOC
 param PbM >= 0;  # Battery maximum charging rate [kW]
 param Pbm = PbM;  # Battery maximum discharge rate [kW]
 param etaBc >= 0; /* Battery charging efficiency */
 param etaBd = etaBc; /* Battery discharging efficiency */
 param etaI = 1; /* Inverter efficiency. This is because the inverter efficiency is already accounted for in the PV data */
 param dt = 24/48; /* Half hourly time steps */
-param N = 96; # Total number of time-slots for 2 days
+param N; # Total number of time-slots for 2 days
 
 # Variables
 var Pgplus{d in D} >= 0, <= PgM;  /* Power flowing from grid to customer in kW */
@@ -42,8 +42,10 @@ minimize cost:
 
 subject to power_balance {d in D}:
     Pgplus[d] - Pgminus[d] = etaI*(etaBc*Pbplus[d] - (1/etaBd)*Pbminus[d]) - etaI*Ppv[d] + Pd[d];
-# subject to battery_operation {d in D}:
-#     eb[d] = if d = 1 then eb1 else if d = N then ebN else eb[d-1] + dt*etaBc*Pbplus[d-1] - dt*(1/etaBd)*Pbminus[d-1];
+subject to battery_operation_first: eb[1] = eb1;
+subject to battery_operation_last: eb[N] = ebN;
+subject to battery_operation {d in 2..N-1}:
+    eb[d] = eb[d-1] + dt*etaBc*Pbplus[d-1] - dt*(1/etaBd)*Pbminus[d-1];
 
 subject to grid_power_limit {d in D}:
     Pgplus[d] <= PgM*dg[d];

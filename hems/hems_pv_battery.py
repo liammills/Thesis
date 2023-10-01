@@ -29,6 +29,7 @@ ampl.param['ebM'] = ebM
 ampl.param['ebm'] = ebm
 ampl.param['PbM'] = PbM # Pbm also set
 ampl.param['eb1'] = eb1
+ampl.param['N'] = N
 
 # Read actual data
 # df = pd.read_csv('./data/HalfHourly_PV_Load_Data/halfhourly_152786204.csv')
@@ -51,6 +52,20 @@ print(df)
 #     'time_of_use_tariff': np.random.rand(Days * N) * 0.4
 # })
 
+def plot_data(x, y, title, xlabel, ylabel, plot_type='line'):
+    plt.figure(figsize=(12, 6))
+    if plot_type == 'line':
+        plt.plot(x, y)
+    elif plot_type == 'step':
+        plt.step(x, y, where='post')
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.show()
+
+# plot_data(range(1, N + 1), df['total_load_kWh'].iloc[:N], "Total Load - Day 1", "Time Slot", "Load (kWh)")
+# plot_data(range(1, N + 1), df['pv_generation_kWh'].iloc[:N], "PV Generation - Day 1", "Time Slot", "PV Generation (kWh)")
+
 df_results = pd.DataFrame()
 
 for day in range(Days):
@@ -60,6 +75,10 @@ for day in range(Days):
     demand_data_day = df['total_load_kWh'].iloc[start:end].values
     pv_data_day = df['pv_generation_kWh'].iloc[start:end].values
     tariff_data_day = df['time_of_use_tariff'].iloc[start:end].values
+    
+    # if day == 0 or day == 150:  # Only plot for the first day and day 150
+    #     plot_data(range(1, N + 1), demand_data_day, f"Total Load - Day {day+1}", "Time Slot", "Load (kWh)")
+    #     plot_data(range(1, N + 1), pv_data_day, f"PV Generation - Day {day+1}", "Time Slot", "PV Generation (kWh)")
 
     ampl.set['D'] = list(range(1, N + 1))
     ampl.getParameter('Pd').setValues(demand_data_day)
@@ -89,13 +108,22 @@ for day in range(Days):
     })
     df_results = pd.concat([df_results, df_day_result], ignore_index=True)
 
+    # if day == 0 or day == 150:  # Only plot for the first day and day 150
+    #     plot_data(range(1, N + 1), Pgplus, f"Pgplus - Day {day+1}", "Time Slot", "Pgplus (kW)")
+    #     plot_data(range(1, N + 1), Pgminus, f"Pgminus - Day {day+1}", "Time Slot", "Pgminus (kW)")
+    #     plot_data(range(1, N + 1), Pbplus, f"Pbplus - Day {day+1}", "Time Slot", "Pbplus (kW)")
+    #     plot_data(range(1, N + 1), Pbminus, f"Pbminus - Day {day+1}", "Time Slot", "Pbminus (kW)")
+    #     plot_data(range(1, N + 1), sb, f"sb - Day {day+1}", "Time Slot", "Battery status", plot_type='step')
+    #     plot_data(range(1, N + 1), dg, f"dg - Day {day+1}", "Time Slot", "Grid flow direction flag", plot_type='step')
+    #     plot_data(range(1, N + 1), eb, f"eb - Day {day+1}", "Time Slot", "eb (kWh)")
+
 df_results.to_csv('ampl_results.csv', index=False)
 
-print(df_results[df_results['Day'] == 150])
+def plot_average_data(df, variable, title, xlabel, ylabel, plot_type='line'):
+    avg_data = df.groupby('TimeSlot')[variable].mean()
+    plot_data(avg_data.index, avg_data.values, title, xlabel, ylabel, plot_type)
 
-plt.figure(figsize=(12, 6))
-plt.plot(df_results[df_results['Day'] == 150]['TimeSlot'], df_results[df_results['Day'] == 0]['Pbplus'])
-plt.title('Power drawn from grid on Day 0')
-plt.xlabel('Time Slot')
-plt.ylabel('Power drawn from grid (Pgplus - kW)')
-plt.show()
+plot_average_data(df_results, 'Pgplus', 'Average Power drawn from grid', 'Time Slot', 'Average Power drawn (Pgplus - kW)')
+plot_average_data(df_results, 'Pbplus', 'Average Battery charge power', 'Time Slot', 'Average Battery charge power (Pbplus - kW)')
+plot_average_data(df_results, 'Pbminus', 'Average Battery discharge power', 'Time Slot', 'Average Battery discharge power (Pbminus - kW)')
+plot_average_data(df_results, 'sb', 'Average Battery Status', 'Time Slot', 'Average Battery Status (sb)', 'step')
