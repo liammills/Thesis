@@ -1,11 +1,10 @@
-# from amplpy import AMPL, DataFrame
+from amplpy import AMPL, Environment
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
 import pathlib
-
-from amplpy import AMPL, Environment
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 load_dotenv(pathlib.Path.cwd() / '.env')
@@ -16,7 +15,7 @@ ampl.setOption('license_uuid', os.environ.get('AMPL_UUID'))
 ampl.read('./hems_pv_battery.mod')
 
 N = 48  # Number of time slots in a day (half-hourly intervals)
-Days = 365  # Number of days
+Days = 1 # Number of days to simulate
 etaBc = etaBd = np.sqrt(0.84)  # Battery charge and discharge efficiency
 ebM = 10  # Max battery storage in kWh
 ebm = 0  # Min battery storage in kWh
@@ -29,11 +28,16 @@ ampl.param['ebM'] = ebM
 ampl.param['ebm'] = ebm
 ampl.param['PbM'] = PbM # Pbm also set
 ampl.param['eb1'] = eb1
-ampl.param['N'] = N
 
-# Read actual data
-# df = pd.read_csv('./data/HalfHourly_PV_Load_Data/halfhourly_152786204.csv')
-df = pd.read_csv('./data/HalfHourly_PV_Load_Data/halfhourly_289382707.csv')
+site_id = 152786204 # 289382707 | 152786204
+df = pd.read_csv('./data/HalfHourly_PV_Load_Data/halfhourly_{}.csv'.format(site_id))
+tou_df = pd.read_csv('./Data/tou_data.csv')
+site_details_df = pd.read_csv('./data/site_details.csv')
+
+selected_site = site_details_df[site_details_df['site_id'] == site_id]
+state = selected_site['state'].values[0]
+postcode = selected_site['postcode'].values[0]
+
 df['total_load'] = df['total_load'] / (0.5 * 1000)  # Convert from Wh to kW for 30-min intervals
 df['pv_generation'] = df['pv_generation'] / (0.5 * 1000)  # Convert from Wh to kW for 30-min intervals
 df['pv_generation'] = df['pv_generation'].apply(lambda x: max(0, x)) # Remove negative values
@@ -41,46 +45,50 @@ df.rename(columns={
     'total_load': 'total_load_kWh',
     'pv_generation': 'pv_generation_kWh'
 }, inplace=True)
-df['time_of_use_tariff'] = 0.4 # TODO: Get actual tariff data
-print(df)
+if len(df) % 48 != 0:
+    df = df.iloc[:-1]
+tou_repeated = np.tile(tou_df['Cost(k) $/kWh'].values, 365)
+df['time_of_use_tariff'] = tou_repeated[:len(df)]
 
-# Mock-up df with historical data for a year
-# np.random.seed(0)
-# df = pd.DataFrame({
-#     'total_load_kWh': np.random.rand(Days * N) * 10,
-#     'pv_generation_kWh': np.random.rand(Days * N) * 5,
-#     'time_of_use_tariff': np.random.rand(Days * N) * 0.4
-# })
-
-def plot_data(x, y, title, xlabel, ylabel, plot_type='line'):
+def plot_daily_results(total_load, pv_generation, battery_soc, day, avg=False):
+    start_idx = day * 48  # Assuming half-hourly data and 2-day horizon
+    time_intervals = [t.strftime('%H:%M') for t in pd.date_range("00:00", "23:30", freq="30min").time]
+    tick_locations = [time_intervals[i] for i in range(0, 48, 6)]
+    tick_locations.append('24:00')
     plt.figure(figsize=(12, 6))
-    if plot_type == 'line':
-        plt.plot(x, y)
-    elif plot_type == 'step':
-        plt.step(x, y, where='post')
+    formatted_date = (datetime(2019, 1, 1) + timedelta(days=day)).strftime('%B %d, %Y')
+    if avg:
+        title = f"Average Energy Metrics from January 1, 2019 to {formatted_date} ({state}, {postcode})"
+    else:
+        title = f"Energy Metrics for {formatted_date} ({state}, {postcode})"
+    if avg:
+        plt.plot(time_intervals, total_load, label='Total Load')
+        plt.plot(time_intervals, pv_generation, label='PV Generation')
+        plt.plot(time_intervals, battery_soc, label='Battery State of Charge')
+    else:
+        start_idx = day * 48
+        plt.plot(time_intervals, total_load.iloc[start_idx:start_idx+48], label='Total Load')
+        plt.plot(time_intervals, pv_generation.iloc[start_idx:start_idx+48], label='PV Generation')
+        plt.plot(time_intervals, battery_soc.iloc[start_idx:start_idx+48], label='Battery State of Charge')  
+    plt.legend()
     plt.title(title)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
+    plt.xlabel('Time of Day')
+    plt.ylabel('kWh')
+    plt.xticks(tick_locations)
+    plt.tight_layout()
     plt.show()
-
-# plot_data(range(1, N + 1), df['total_load_kWh'].iloc[:N], "Total Load - Day 1", "Time Slot", "Load (kWh)")
-# plot_data(range(1, N + 1), df['pv_generation_kWh'].iloc[:N], "PV Generation - Day 1", "Time Slot", "PV Generation (kWh)")
 
 df_results = pd.DataFrame()
 
-for day in range(Days):
+for day in range(max(Days - 1, 1)):
     start = day * N
-    end = start + N
+    end = start + 2*N
 
     demand_data_day = df['total_load_kWh'].iloc[start:end].values
     pv_data_day = df['pv_generation_kWh'].iloc[start:end].values
     tariff_data_day = df['time_of_use_tariff'].iloc[start:end].values
-    
-    # if day == 0 or day == 150:  # Only plot for the first day and day 150
-    #     plot_data(range(1, N + 1), demand_data_day, f"Total Load - Day {day+1}", "Time Slot", "Load (kWh)")
-    #     plot_data(range(1, N + 1), pv_data_day, f"PV Generation - Day {day+1}", "Time Slot", "PV Generation (kWh)")
 
-    ampl.set['D'] = list(range(1, N + 1))
+    ampl.set['D'] = list(range(1, 2*N + 1))
     ampl.getParameter('Pd').setValues(demand_data_day)
     ampl.getParameter('Ppv').setValues(pv_data_day)
     ampl.getParameter('c_g').setValues(tariff_data_day)
@@ -98,32 +106,25 @@ for day in range(Days):
     df_day_result = pd.DataFrame({
         'Day': [day] * N,
         'TimeSlot': range(1, N + 1),
-        'Pgplus': Pgplus,
-        'Pgminus': Pgminus,
-        'Pbplus': Pbplus,
-        'Pbminus': Pbminus,
-        'sb': sb,
-        'dg': dg,
-        'eb': eb
+        'Pgplus': Pgplus[:N],
+        'Pgminus': Pgminus[:N],
+        'Pbplus': Pbplus[:N],
+        'Pbminus': Pbminus[:N],
+        'sb': sb[:N],
+        'dg': dg[:N],
+        'eb': eb[:N]
     })
-    df_results = pd.concat([df_results, df_day_result], ignore_index=True)
 
-    # if day == 0 or day == 150:  # Only plot for the first day and day 150
-    #     plot_data(range(1, N + 1), Pgplus, f"Pgplus - Day {day+1}", "Time Slot", "Pgplus (kW)")
-    #     plot_data(range(1, N + 1), Pgminus, f"Pgminus - Day {day+1}", "Time Slot", "Pgminus (kW)")
-    #     plot_data(range(1, N + 1), Pbplus, f"Pbplus - Day {day+1}", "Time Slot", "Pbplus (kW)")
-    #     plot_data(range(1, N + 1), Pbminus, f"Pbminus - Day {day+1}", "Time Slot", "Pbminus (kW)")
-    #     plot_data(range(1, N + 1), sb, f"sb - Day {day+1}", "Time Slot", "Battery status", plot_type='step')
-    #     plot_data(range(1, N + 1), dg, f"dg - Day {day+1}", "Time Slot", "Grid flow direction flag", plot_type='step')
-    #     plot_data(range(1, N + 1), eb, f"eb - Day {day+1}", "Time Slot", "eb (kWh)")
+    df_results = pd.concat([df_results, df_day_result], ignore_index=True)
 
 df_results.to_csv('ampl_results.csv', index=False)
 
-def plot_average_data(df, variable, title, xlabel, ylabel, plot_type='line'):
-    avg_data = df.groupby('TimeSlot')[variable].mean()
-    plot_data(avg_data.index, avg_data.values, title, xlabel, ylabel, plot_type)
+plot_daily_results(df['total_load_kWh'], df['pv_generation_kWh'], df_results['eb'], day)
 
-plot_average_data(df_results, 'Pgplus', 'Average Power drawn from grid', 'Time Slot', 'Average Power drawn (Pgplus - kW)')
-plot_average_data(df_results, 'Pbplus', 'Average Battery charge power', 'Time Slot', 'Average Battery charge power (Pbplus - kW)')
-plot_average_data(df_results, 'Pbminus', 'Average Battery discharge power', 'Time Slot', 'Average Battery discharge power (Pbminus - kW)')
-plot_average_data(df_results, 'sb', 'Average Battery Status', 'Time Slot', 'Average Battery Status (sb)', 'step')
+end_idx = Days * int(N)
+numeric_cols = df.select_dtypes(include=[np.number]).columns
+avg_input = df[numeric_cols].iloc[:end_idx].groupby(np.arange(end_idx) % 48).mean()
+avg_results = df_results.groupby('TimeSlot').mean()[:int(N)]
+plot_daily_results(avg_input['total_load_kWh'], avg_input['pv_generation_kWh'], avg_results['eb'], day, True)
+
+del df_day_result

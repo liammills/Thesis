@@ -15,14 +15,14 @@ param PgM = 15;  /* Maximum capacity of grid connection in kW */
 param ebM >= 0;  # Battery maximum storage limit [kWh] | change to set for EV
 param ebm >= 0;  # Battery minimum storage limit [kWh] | change to set for EV
 param eb1 >= 0;  # Start-of-day battery state of charge (SOC)
-param ebN = 0.8 * ebM; # End-of-day (day 2 in a 2-day rolling horizon) battery state of charge (SOC) -  20% Max SOC
+param ebN = 0.2 * ebM; # End-of-day (day 2 in a 2-day rolling horizon) battery state of charge (SOC) -  20% Max SOC
 param PbM >= 0;  # Battery maximum charging rate [kW]
 param Pbm = PbM;  # Battery maximum discharge rate [kW]
 param etaBc >= 0; /* Battery charging efficiency */
 param etaBd = etaBc; /* Battery discharging efficiency */
 param etaI = 1; /* Inverter efficiency. This is because the inverter efficiency is already accounted for in the PV data */
 param dt = 24/48; /* Half hourly time steps */
-param N; # Total number of time-slots for 2 days
+param N = 96; # Total number of time-slots for 2 days
 
 # Variables
 var Pgplus{d in D} >= 0, <= PgM;  /* Power flowing from grid to customer in kW */
@@ -33,7 +33,7 @@ var eb{d in D} >= ebm, <= ebM;  # Battery state of charge
 var dg{d in D} binary;   /* Direction of grid power flow (0: demand->grid, 1: grid->demand) */
 var sb{d in D} binary;  /* Battery charging status (0: discharge, 1: charge) */
 
-# Objective Function: Minimize daily electricity cost
+# Objective Function: Minimize daily electricity cost over a 2-day time horizon
 minimize cost:
     sum{d in D} (dt*c_g[d]*Pgplus[d] - dt*c_pv*Pgminus[d]);  # With Time of Use Tariff
     # sum{d in D} (dt*c_flat*Pgplus[d] - dt*c_pv*Pgminus[d]); # With Flat Tariff
@@ -43,7 +43,7 @@ minimize cost:
 subject to power_balance {d in D}:
     Pgplus[d] - Pgminus[d] = etaI*(etaBc*Pbplus[d] - (1/etaBd)*Pbminus[d]) - etaI*Ppv[d] + Pd[d];
 subject to battery_operation_first: eb[1] = eb1;
-subject to battery_operation_last: eb[N] = ebN;
+subject to battery_operation_last: eb[N] = ebN; # WHY 0.2 * ebM?
 subject to battery_operation {d in 2..N-1}:
     eb[d] = eb[d-1] + dt*etaBc*Pbplus[d-1] - dt*(1/etaBd)*Pbminus[d-1];
 
